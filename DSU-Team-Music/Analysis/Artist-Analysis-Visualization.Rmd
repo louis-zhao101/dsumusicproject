@@ -1,0 +1,401 @@
+---
+title: "Artist Analysis & Visualization"
+output: pdf_document
+---
+
+```{r}
+library(readr)
+
+artists <- read_csv("/Users/Anton/Desktop/DSU Project/artist_compiled_complete.csv")
+artists <- artists[artists$artist != "blastoyz" | artists$DateTime > as.Date("2018-07-19"),]
+artists <- artists[artists$artist != "alessandra roncone",]
+
+festivals <- read_csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/songkick_data_initial_small_artists.csv")[,-1]
+
+library(stringr)
+festivals$Date <- as.Date(str_remove(festivals$Date, "\\w*\\s"), format = "%d %B %Y")
+
+festivals$Artist <- str_replace_all(tolower(festivals$Artist), "\\.", "")
+
+library(dplyr)
+festivals <- festivals %>% group_by(Artist, Event) %>% mutate(num_days = n())
+
+festivals <- festivals[!duplicated(festivals[,c("Artist", "Event")]),]
+
+songs <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/spotify_song_data_initial_small_artists.csv", stringsAsFactors = FALSE)
+songs <- songs[,c("artist_name", "name", "release_date", "total_tracks")]
+songs$release_date <- as.Date(songs$release_date)
+songs$artist_name <- str_replace_all(tolower(songs$artist_name), "\\.", "")
+```
+
+```{r}
+str(artists)
+str(as.data.frame(festivals))
+str(songs)
+```
+
+
+```{r}
+library(ggplot2)
+library(ggthemr)
+
+ggthemr("pale")
+#ggthemr_reset()
+
+ggplot(artists[artists$artist == "lil texas",], aes(x = DateTime, y = Total.Followers)) +
+  geom_line(size = 1, color = "red4") +
+  geom_vline(data = festivals[festivals$Artist == "lil texas",], mapping = aes(xintercept = Date, color = "#43008a"), alpha = 1) +
+  geom_vline(data = songs[songs$artist_name == "lil texas",], mapping = aes(xintercept = release_date, color = "#007a8a"), alpha = 0.75) +
+  scale_color_manual(name = "Event", values = c("#43008a" = "#43008a", "#007a8a" = "#007a8a"), labels = c("Festival", "Song Release")) +
+  xlab("Date") +
+  ylab("Followers") +
+  ggtitle("Number of Followersfor for Lil Texas")
+
+ggplot(artists[artists$artist == "lil texas",], aes(x = DateTime, y = Monthly.Listeners)) +
+  geom_line(size = 1, color = "chartreuse") +
+  geom_vline(data = festivals[festivals$Artist == "lil texas",], mapping = aes(xintercept = Date, color = "#43008a"), alpha =1) +
+  geom_vline(data = songs[songs$artist_name == "lil texas",], mapping = aes(xintercept = release_date, color = "#007a8a"), alpha = 0.5) +
+  scale_color_manual(name = "Event", values = c("#43008a" = "#43008a", "#007a8a" = "#007a8a"), labels = c("Festival", "Song Release")) +
+  xlab("Date") +
+  ylab("Monthly Listeners") +
+  ggtitle("Number of Monthly Listeners for Lil Texas")
+
+```
+
+```{r, warning=FALSE}
+library(dplyr)
+
+artists_summary <- artists %>% group_by(artist) %>% summarise(av_listeners = mean(Monthly.Listeners),
+                                                     av_followers = mean(Total.Followers),
+                                                     av_lis_change = mean(listeners_change),
+                                                     av_fol_change = mean(followers_change),
+                                                     av_pct_lis_change = mean(lis_pct_change),
+                                                     av_pct_fol_change = mean(fol_pct_change),
+                                                     num_fest = sum(festivals$Artist == artist),
+                                                     num_fest_days = sum(festivals[festivals$Artist == artist,]$num_days),
+                                                     av_fest_days = num_fest_days/num_fest)
+```
+
+
+```{r}
+cat(unique(artists$artist), sep = ", ")
+
+ggplot(artists_summary, aes(y = av_followers, x = reorder(artist, -av_followers))) +
+  geom_bar(stat = "identity", fill = "red4") +
+  scale_y_continuous(limits = c(0, 125000), labels = scales::comma) +
+  ylab("Average Followers") +
+  ggtitle("Artists by Average Followers") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        axis.line = element_blank(),
+        axis.title.x = element_blank())
+
+ggplot(artists_summary, aes(y = av_listeners, x = reorder(artist, -av_listeners))) +
+  geom_bar(stat = "identity", fill = "chartreuse4") +
+  scale_y_continuous(labels = scales::comma) +
+  ylab("Average Monthly Listeners") +
+  ggtitle("Artists by Average Monthly Listeners") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        axis.line = element_blank(),
+        axis.title.x = element_blank())
+
+ggplot(artists_summary, aes(y = num_fest, x = reorder(artist, -num_fest))) +
+  geom_bar(stat = "identity", fill = "#43008a") +
+  scale_y_continuous(labels = scales::comma) +
+  ylab("Number of Festival Performances") +
+  ggtitle("Artists by Number of Festivals") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        axis.line = element_blank(),
+        axis.title.x = element_blank())
+
+```
+
+
+```{r}
+ggplot(artists_summary, aes(x = num_fest, y = av_fol_change)) +
+  geom_smooth(method = "lm", fill = "red", color = "red", alpha = 0.13) +
+  geom_point(color = "red4", size = 1.7) +
+  xlab("Number of Festival Performances") +
+  ylab("Change in Followers") +
+  ggtitle("Number of Festivals vs. Average Change in Followers")
+
+ggplot(artists_summary, aes(x = num_fest, y = av_lis_change)) +
+  geom_smooth(method = "lm", fill = "chartreuse", color = "chartreuse", alpha = 0.13) +
+  geom_point(color = "chartreuse4", size = 1.7) +
+  xlab("Number of Festival Performances") +
+  ylab("Change in Monthly Listeners") +
+  ggtitle("Number of Festivals vs. Average Change in Monthly Listeners")
+
+```
+
+```{r}
+lm(av_fol_change ~ num_fest, data = artists_summary) %>% summary()
+lm(av_fol_change ~ num_fest + av_followers, data = artists_summary) %>% summary()
+```
+
+```{r}
+lm(av_lis_change ~ num_fest, data = artists_summary) %>% summary()
+lm(av_lis_change ~ num_fest + av_listeners, data = artists_summary) %>% summary()
+```
+
+```{r}
+ggplot(artists_summary, aes(x = num_fest, y = av_followers)) +
+  geom_smooth(method = "lm", fill = "red", color = "red", alpha = 0.13) +
+  geom_point(color = "red4", size = 1.7) +
+  xlab("Number of Festival Performances") +
+  ylab("Followers") +
+  ggtitle("Number of Festivals vs. Average Followers")
+
+ggplot(artists_summary, aes(x = num_fest, y = av_listeners)) +
+  geom_smooth(method = "lm", fill = "chartreuse", color = "chartreuse", alpha = 0.13) +
+  geom_point(color = "chartreuse4", size = 1.7) +
+  xlab("Number of Festival Performances") +
+  ylab("Monthly Listeners") +
+  ggtitle("Number of Festivals vs. Average Monthly Listeners")
+```
+
+
+```{r}
+ggplot(artists_summary, aes(x = num_fest, y = av_pct_fol_change)) +
+  geom_smooth(method = "lm", fill = "red", color = "red", alpha = 0.13) +
+  geom_point(color = "red4", size = 1.7) +
+  scale_y_continuous(labels = scales::percent) +
+  xlab("Number of Festival Performances") +
+  ylab("Percent Growth in Followers") +
+  ggtitle("Number of Festivals vs. Average Percent Change in Followers")
+
+ggplot(artists_summary, aes(x = num_fest, y = av_pct_lis_change)) +
+  geom_smooth(method = "lm", fill = "chartreuse", color = "chartreuse", alpha = 0.13) +
+  geom_point(color = "chartreuse4", size = 1.7) +
+  scale_y_continuous(labels = scales::percent) +
+  xlab("Number of Festival Performances") +
+  ylab("Percent Growth in Monthly Listeners") +
+  ggtitle("Number of Festivals vs. Average Percent Change in Monthly Listeners")
+```
+
+```{r}
+lm(av_pct_fol_change ~ num_fest, data = artists_summary) %>% summary()
+lm(av_pct_fol_change ~ num_fest + av_followers, data = artists_summary) %>% summary()
+
+lm(av_pct_lis_change ~ num_fest, data = artists_summary) %>% summary()
+lm(av_pct_lis_change ~ num_fest + av_followers, data = artists_summary) %>% summary()
+```
+
+```{r, warning=FALSE}
+artists <-  artists %>% group_by(artist, DateTime) %>% 
+  mutate(days_before_next_fest = max(as.numeric(DateTime - unlist(festivals[festivals$Artist == artist & 
+                                                                               festivals$Date > DateTime, "Date"]))),
+         days_before_next_song = max(as.numeric(DateTime - unlist(songs[songs$artist_name == artist & 
+                                                                               songs$release_date > DateTime, "release_date"]))))
+
+artists <- artists %>% mutate(festival_before_4 = days_before_next_fest >= -4,
+                              festival_before_7 = days_before_next_fest >= -7,
+                              festival_before_14 = days_before_next_fest >= -14,
+                              song_within_31 = closest_song_days <= 31,
+                              song_within_45 = closest_song_days <= 45,
+                              song_before_4 = days_before_next_song >= -4,
+                              song_before_7 = days_before_next_song >= -7,
+                              song_before_14 = days_before_next_song >= -14)
+```
+
+```{r, warning=FALSE}
+change_fol_fest <- artists %>% group_by(artist) %>%
+  summarise(before_fest_pct_change = 
+              mean(unlist(artists[artists$artist == artist & artists$festival_before_7 & !artists$song_within_7, "fol_pct_change"])),
+            after_fest_pct_change = 
+              mean(unlist(artists[artists$artist == artist & artists$festival_within_7 & !artists$song_within_7, "fol_pct_change"])),
+            fest_change_in_pct_change =
+              after_fest_pct_change - before_fest_pct_change) %>%
+  arrange(-fest_change_in_pct_change)
+
+change_fol_fest <- na.omit(change_fol_fest)
+```
+
+```{r}
+library(ggalt)
+#815 530
+ggplot(change_fol_fest, aes(x=before_fest_pct_change, xend=after_fest_pct_change, y=reorder(artist, fest_change_in_pct_change), yend = reorder(artist, fest_change_in_pct_change))) + 
+  geom_vline(xintercept = mean(change_fol_fest$before_fest_pct_change), color = "grey60", linetype = 2) +
+  geom_vline(xintercept = mean(change_fol_fest$after_fest_pct_change), color = "orange2", linetype = 2) +
+  geom_dumbbell(colour_x="grey89", 
+                colour_xend = "orange1",
+                size_x = 3,
+                size_xend = 3.5) +
+  xlab("Follower Percentage Change") +
+  ylab("Artist") +
+  ggtitle("Relative Change in Followers for Week Before and Week After Festival") +
+  theme(panel.grid = element_blank())
+#875 530
+ggplot(change_fol_fest, aes(x = fest_change_in_pct_change, 
+                            y = reorder(artist, fest_change_in_pct_change))) + 
+  geom_segment(data = change_fol_fest,
+               aes(x=0, 
+                   xend=fest_change_in_pct_change, 
+                   y=reorder(artist, fest_change_in_pct_change), 
+                   yend=reorder(artist, fest_change_in_pct_change)), 
+               size = 0.7,
+               color = "rosybrown") +
+  geom_vline(xintercept = 0, color = "black", linetype = 2, alpha = 0.5) +
+  geom_vline(xintercept = mean(change_fol_fest$fest_change_in_pct_change), linetype = 2, color = "orange1") +
+  xlab("Change in Follower Growth Rate") +
+  ylab("Artist") +
+  ggtitle("Change in Growth Rate of Followers from Week Before to Week After Festival") +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+mean(change_fol_fest$before_fest_pct_change)
+mean(change_fol_fest$after_fest_pct_change)
+mean(change_fol_fest$fest_change_in_pct_change)
+sd(change_fol_fest$fest_change_in_pct_change)
+mean(artists$fol_pct_change)
+```
+
+
+
+
+```{r, warning=FALSE}
+change_lis_fest <- artists %>% group_by(artist) %>%
+  summarise(before_fest_pct_change =
+              mean(unlist(artists[artists$artist == artist &
+                                    artists$festival_before_7 &
+                                    !artists$song_within_7, "lis_pct_change"])),
+            after_fest_pct_change =
+              mean(unlist(artists[artists$artist == artist & artists$festival_within_7 & !artists$song_within_7, "lis_pct_change"])),
+            fest_change_in_pct_change =
+              after_fest_pct_change - before_fest_pct_change) %>%
+  arrange(-fest_change_in_pct_change)
+
+change_lis_fest <- na.omit(change_lis_fest)
+```
+
+```{r}
+ggplot(change_lis_fest, aes(x=before_fest_pct_change, xend=after_fest_pct_change, y=reorder(artist, fest_change_in_pct_change), yend = reorder(artist, fest_change_in_pct_change))) + 
+  geom_vline(xintercept = mean(change_lis_fest$before_fest_pct_change), color = "black", linetype = 2) +
+  geom_vline(xintercept = mean(change_lis_fest$after_fest_pct_change), color = "maroon", linetype = 2) +
+  geom_dumbbell(colour_x="grey89", 
+                colour_xend = "maroon",
+                size_x = 3,
+                size_xend = 3.5) +
+  xlab("Monthly Listener Percentage Change") +
+  ylab("Artist") +
+  ggtitle("Relative Change in Monthly Listeners for Week Before and Week After Festival") +
+  theme(panel.grid = element_blank())
+
+ggplot(change_lis_fest, aes(x = fest_change_in_pct_change, 
+                            y = reorder(artist, fest_change_in_pct_change))) + 
+  geom_segment(data = change_lis_fest,
+               aes(x=0, 
+                   xend=fest_change_in_pct_change, 
+                   y=reorder(artist, fest_change_in_pct_change), 
+                   yend=reorder(artist, fest_change_in_pct_change)), 
+               size = 0.7,
+               color = "mistyrose3") +
+  geom_vline(xintercept = 0, color = "black", linetype = 2, alpha = 0.5) +
+  geom_vline(xintercept = mean(change_lis_fest$fest_change_in_pct_change), linetype = 2, color = "maroon") +
+  xlab("Change in Monthly Listener Growth Rate") +
+  ylab("Artist") +
+  ggtitle("Change in Growth Rate of Monthly Listeners from Week Before to Week After Festival") +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+mean(change_lis_fest$before_fest_pct_change)
+mean(change_lis_fest$after_fest_pct_change)
+mean(change_lis_fest$fest_change_in_pct_change)
+sd(change_lis_fest$fest_change_in_pct_change)
+mean(artists$lis_pct_change)
+```
+
+
+```{r}
+lm(fol_pct_change ~ festival_within_7 + song_within_7 + festival_before_7, data = artists) %>% summary()
+
+lm(fol_pct_change ~ festival_within_14 + song_within_14 + festival_before_14, data = artists) %>% summary()
+```
+
+```{r}
+artists$weeks_af_fest <- ifelse(artists$closest_fest_days == 0, 0, ifelse(artists$closest_fest_days %% 7 == 0, floor(artists$closest_fest_days / 7) - 1, floor(artists$closest_fest_days / 7)))
+artists$weeks_af_song <- ifelse(artists$closest_song_days == 0, 0, ifelse(artists$closest_song_days %% 7 == 0, floor(artists$closest_song_days / 7) - 1, floor(artists$closest_song_days / 7)))
+
+
+artists$week_af_fest_1 <- artists$weeks_af_fest == 0
+artists$week_af_fest_2 <- artists$weeks_af_fest == 1
+artists$week_af_fest_3 <- artists$weeks_af_fest == 2
+artists$week_af_song_1 <- artists$weeks_af_song == 0
+artists$week_af_song_2 <- artists$weeks_af_song == 1
+artists$week_af_song_3 <- artists$weeks_af_song == 2
+artists$week_af_song_4 <- artists$weeks_af_song == 3
+artists$week_af_song_5 <- artists$weeks_af_song == 4
+artists$week_af_song_6 <- artists$weeks_af_song == 5
+artists$week_af_song_7 <- artists$weeks_af_song == 6
+artists$week_af_song_8 <- artists$weeks_af_song == 7
+artists$week_af_song_9 <- artists$weeks_af_song == 8
+artists$week_af_song_10 <- artists$weeks_af_song == 9
+
+lm(fol_pct_change ~ week_af_fest_1 + week_af_fest_2 + week_af_fest_3 +
+     week_af_song_1 + week_af_song_2 + week_af_song_3 + week_af_song_4 +
+     festival_before_7, data = artists) %>% summary()
+
+lm(lis_pct_change ~ week_af_fest_1 + week_af_fest_2 + week_af_fest_3 +
+     week_af_song_1 + week_af_song_2 + week_af_song_3 + week_af_song_4 +
+     festival_before_7, data = artists) %>% summary()
+
+```
+
+```{r}
+lm(fol_pct_change ~ festival_within_7 + song_within_7, data = artists) %>% summary()
+```
+
+
+```{r}
+library(plm)
+
+fixed_model_fol <- plm(fol_pct_change ~ week_af_fest_1 + week_af_fest_2 + week_af_fest_3 +
+     week_af_song_1 + week_af_song_2 + week_af_song_3 + week_af_song_4 +
+     festival_before_7, 
+     data = artists, 
+     index = ("artist"), 
+     model = "within", 
+     effect = "individual")
+
+summary(fixed_model_fol)
+fixef(fixed_model_fol)
+```
+
+```{r}
+artists %>% filter(artist == "andrew bayer") %>% group_by(artist) %>% summarise(mean(fol_pct_change), mean(Total.Followers), mean(followers_change))
+
+artists %>% filter(artist == "andrew bayer", week_af_fest_1) %>% group_by(artist) %>% summarise(mean(fol_pct_change), mean(Total.Followers), mean(followers_change))
+
+artists %>% filter(artist == "lil texas") %>% group_by(artist) %>% summarise(mean(fol_pct_change), mean(Total.Followers), mean(followers_change))
+
+artists %>% filter(artist == "lil texas", week_af_fest_1) %>% group_by(artist) %>% summarise(mean(fol_pct_change), mean(Total.Followers), mean(followers_change))
+
+
+```
+
+
+
+```{r}
+fixed_model_lis <- plm(lis_pct_change ~ week_af_fest_1 + week_af_fest_2 + week_af_fest_3 +
+     week_af_song_1 + week_af_song_2 + week_af_song_3 + week_af_song_4 +
+     festival_before_7, 
+     data = artists, 
+     index = ("artist"), 
+     model = "within", 
+     effect = "individual")
+
+summary(fixed_model_lis)
+fixef(fixed_model_lis)
+```
+
+
+
+
+
+
+
+
+
+
+

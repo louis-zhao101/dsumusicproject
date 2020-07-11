@@ -1,0 +1,61 @@
+---
+title: "Artist Selection"
+output: pdf_document
+---
+
+
+```{r}
+artists <- read.csv("/Users/Anton/Desktop/DSU Project/scraped_data.csv")
+summary(artists)
+str(artists)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(artists, aes(x = followers, y = popularity)) +
+  geom_point()
+```
+
+
+```{r}
+head(artists[order(artists$followers, decreasing = TRUE),], 30)
+
+artists_small <- artists[artists$followers < 150000 & artists$popularity > 5,]
+```
+
+```{r}
+ggplot(artists_small, aes(x = followers, y = popularity)) +
+  geom_point()
+
+ggplot(artists_small, aes(followers)) +
+  geom_histogram()
+```
+
+```{r}
+set.seed(123)
+
+artists_small_sample_i <- sample(nrow(artists_small), size = 30)
+
+artists_small_sample <- artists_small[artists_small_sample_i, ]
+
+ggplot(artists_small_sample, aes(x = followers, y = popularity)) +
+  geom_point()
+
+ggplot(artists_small_sample, aes(followers)) +
+  geom_histogram()
+```
+
+
+```{r}
+#write.csv(artists_small_sample, file = "/Users/Anton/Desktop/initial_small_artists.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,118 @@
+---
+title: "Exploratory Data Analysis"
+output: pdf_document
+---
+
+```{r}
+followers <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/initial_artists_followers.csv", stringsAsFactors = FALSE)
+
+listeners <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/initial_artists_monthly_listeners.csv", stringsAsFactors = FALSE)
+
+popularity <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/initial_artists_popularity.csv", stringsAsFactors = FALSE)
+
+festivals <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/songkick_data_initial_small_artists.csv", stringsAsFactors = FALSE)
+
+songs <- read.csv("/Users/Anton/Desktop/DSU Project/Artists Compiled/spotify_song_data_initial_small_artists.csv", stringsAsFactors = FALSE)
+```
+
+
+```{r}
+str(followers)
+followers$DateTime <- as.Date(followers$DateTime)
+names(followers)[names(followers) == "Change"] <- "followers_change"
+
+
+str(listeners)
+listeners$DateTime <- as.Date(listeners$DateTime)
+names(listeners)[names(listeners) == "Change"] <- "listeners_change"
+
+str(popularity)
+listeners$DateTime <- as.Date(listeners$DateTime)
+
+artist_reach <- merge(merge(followers, listeners, all = TRUE), popularity, all = TRUE)
+
+artist_reach <- artist_reach[!is.na(artist_reach$Total.Followers),]
+
+str(festivals)
+festivals <- festivals[,-1]
+
+library(stringr)
+festivals$Date <- as.Date(str_remove(festivals$Date, "\\w*\\s"), format = "%d %B %Y")
+
+festivals$Artist <- str_replace_all(tolower(festivals$Artist), "\\.", "")
+
+str(songs)
+
+songs <- songs[,c("artist_name", "name", "release_date", "total_tracks")]
+songs$release_date <- as.Date(songs$release_date)
+songs$artist_name <- str_replace_all(tolower(songs$artist_name), "\\.", "")
+
+```
+
+```{r}
+library(dplyr)
+
+miss <- artist_reach %>% select(-artist) %>% group_by(DateTime) %>% summarise_all(function(x) sum(is.na(x)))
+
+plot(x = miss$DateTime, y = miss$Monthly.Listeners)
+
+artist_reach <- artist_reach[artist_reach$DateTime > "2018-04-03",]
+
+miss <- artist_reach %>% group_by(artist) %>% summarise_all(function(x) sum(is.na(x)))
+
+missing_artists <- miss[miss$Monthly.Listeners > 5, ]$artist
+
+remove_bad_artists_i <- !((artist_reach$artist %in% missing_artists & is.na(artist_reach$Monthly.Listeners))) | !(artist_reach$artist %in% missing_artists)
+
+artist_reach <- artist_reach[remove_bad_artists_i,]
+
+artist_reach <- artist_reach[!(is.na(artist_reach$Monthly.Listeners)),]
+
+artist_reach <- artist_reach %>% select(-Popularity)
+
+songs <- songs[!(is.na(songs$release_date)),]
+
+```
+
+
+
+```{r}
+library(xts)
+
+for(artist in unique(artist_reach$artist)) {
+  example_artist_reach <- artist_reach[artist_reach$artist == artist, -1]
+  
+  example_festivals <- festivals[festivals$Artist == artist,]
+  example_songs <- songs[songs$artist_name == artist,]
+  
+  example_ts <- xts(example_artist_reach[,-1], order.by = example_artist_reach[,1])
+  
+  example_festivals <- example_festivals[!(duplicated(example_festivals[,1:3])),]
+  example_events_ts <- xts(example_festivals$Event, example_festivals$Date)
+  example_songs_ts <- xts(example_songs$name, example_songs$release_date)
+  
+  plot(example_ts[,c(1)], legend.loc = "topleft", main = artist)
+  addEventLines(example_events_ts, col = 3) # Green
+  print(addEventLines(example_songs_ts, col = 4)) # Blue
+  plot(example_ts[,c(3)], legend.loc = "topleft", main = artist)
+  addEventLines(example_events_ts, col = 3) # Green
+  print(addEventLines(example_songs_ts, col = 4)) # Blue
+  plot(example_ts[,c(2)], legend.loc = "topleft", main = artist)
+  addEventLines(example_events_ts, col = 3)
+  print(addEventLines(example_songs_ts, col = 4))
+  plot(example_ts[,c(4)], legend.loc = "topleft", main = artist)
+  addEventLines(example_events_ts, col = 3)
+  print(addEventLines(example_songs_ts, col = 4))
+}
+
+```
+
+
+
+
+
+
+
+
+
+
